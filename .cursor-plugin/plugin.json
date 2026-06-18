@@ -1,0 +1,14 @@
+{
+  "name": "pr-review-toolkit",
+  "displayName": "PR Review Toolkit",
+  "version": "1.0.0",
+  "description": "Structured PR review agents for comments, tests, error handling, types, code quality, and simplification. Adapted for this notifications-api-python screening project.",
+  "author": {
+    "name": "Project",
+    "email": "local@project"
+  },
+  "keywords": ["pr-review", "code-review", "testing", "quality"],
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "hooks": "../.cursor/hooks.json"
+}

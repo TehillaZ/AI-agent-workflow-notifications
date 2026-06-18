@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "py .cursor/hooks/block_provider_edits.py",
+        "matcher": "Write|StrReplace|Delete",
+        "failClosed": false
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "py .cursor/hooks/guard_git_push.py",
+        "matcher": "git push",
+        "failClosed": false
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "py .cursor/hooks/session_context.py"
+      }
+    ]
+  }
+}

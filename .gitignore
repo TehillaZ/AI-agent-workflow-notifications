@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# MCP memory store (local agent notes — do not commit)
+.cursor/memory.jsonl
