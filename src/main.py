@@ -2,11 +2,10 @@ from flask import Flask, request, jsonify
 
 from storage import seed, add_notification, get_all, find_by_id, recompute_sms_segments
 from processor import NotificationProcessor
-from models import SENT
+from models import SENT, CHANNEL_TYPES
 
 app = Flask(__name__)
 
-ALLOWED_CHANNEL_TYPES = {"email", "sms", "push"}
 ALLOWED_PUT_FIELDS = {"message", "targetChannels"}
 
 seed()
@@ -24,7 +23,7 @@ def _validate_channels(channels):
     for channel in channels:
         if not isinstance(channel, dict):
             return "invalid channel entry"
-        if channel.get("type") not in ALLOWED_CHANNEL_TYPES:
+        if channel.get("type") not in CHANNEL_TYPES:
             return "invalid channel type"
         value = channel.get("value")
         if not isinstance(value, str) or not value.strip():
