@@ -7,20 +7,48 @@ from providers.sms_provider import send as send_sms
 from providers.push_provider import send as send_push
 
 
-def _apply_provider_response(n, response):
+def _classify_result(response):
     result = response["Result"]
     if result == "Success":
-        n.status = SENT
-        n.lastError = None
-    elif result == "TemporaryFailure":
-        n.status = RETRY_PENDING
-        n.lastError = response["Message"]
-    elif result in ("PermanentFailure", "InvalidRequest"):
-        n.status = FAILED
-        n.lastError = response["Message"]
-    else:
-        n.status = FAILED
-        n.lastError = response.get("Message", "Unknown provider result")
+        return "success", None
+    if result == "TemporaryFailure":
+        return "temporary", response["Message"]
+    if result in ("PermanentFailure", "InvalidRequest"):
+        return "failure", response["Message"]
+    return "failure", response.get("Message", "Unknown provider result")
+
+
+def _aggregate_results(outcomes):
+    errors = []
+    has_temporary = False
+    has_failure = False
+    for kind, message in outcomes:
+        if kind == "success":
+            continue
+        if kind == "temporary":
+            has_temporary = True
+        else:
+            has_failure = True
+        if message:
+            errors.append(message)
+
+    if has_temporary:
+        return RETRY_PENDING, "; ".join(errors) if errors else None
+    if has_failure:
+        return FAILED, "; ".join(errors) if errors else None
+    return SENT, None
+
+
+def _dispatch_channel(target, message):
+    channel_type = target["type"]
+    payload = {"recipient": target["value"], "message": message}
+    if channel_type == "email":
+        return send_email(payload)
+    if channel_type == "sms":
+        return send_sms(payload)
+    if channel_type == "push":
+        return send_push(payload)
+    return None
 
 
 class NotificationProcessor:
@@ -33,20 +61,16 @@ class NotificationProcessor:
             n.status = FAILED
             n.lastError = "No target channels"
             return
-        target = n.targetChannels[0]
 
-        if target["type"] == "email":
-            response = send_email({"recipient": target["value"], "message": n.message})
-        elif target["type"] == "sms":
-            response = send_sms({"recipient": target["value"], "message": n.message})
-        elif target["type"] == "push":
-            response = send_push({"recipient": target["value"], "message": n.message})
-        else:
-            n.status = FAILED
-            n.lastError = "Unknown channel"
-            return
+        outcomes = []
+        for target in n.targetChannels:
+            response = _dispatch_channel(target, n.message)
+            if response is None:
+                outcomes.append(("failure", f"Unknown channel: {target['type']}"))
+                continue
+            outcomes.append(_classify_result(response))
 
-        _apply_provider_response(n, response)
+        n.status, n.lastError = _aggregate_results(outcomes)
 
     def send_all(self):
         to_send = [
