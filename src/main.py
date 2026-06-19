@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 
 from storage import seed, add_notification, get_all, find_by_id, recompute_sms_segments
 from processor import NotificationProcessor
+from models import SENT
 
 app = Flask(__name__)
 
@@ -105,6 +106,8 @@ def send_one_route(nid):
     n = find_by_id(nid)
     if not n:
         return jsonify({"error": "not found"}), 404
+    if n.status == SENT:
+        return jsonify({"error": "notification already sent"}), 409
     processor.send_one(n)
     return jsonify(n.__dict__)
 
@@ -116,4 +119,4 @@ def send_bulk():
 
 
 if __name__ == "__main__":
-    app.run(port=3000)
+    app.run(port=3000, debug=False)
