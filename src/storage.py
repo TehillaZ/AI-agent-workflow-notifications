@@ -28,6 +28,13 @@ def find_by_id(nid):
     return None
 
 
+def recompute_sms_segments(n):
+    if any(c.get("type") == "sms" for c in n.targetChannels):
+        n.smsSegments = min_sms_segments(n.message)
+    else:
+        n.smsSegments = 0
+
+
 def seed():
     global next_id
     notifications.clear()
