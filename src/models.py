@@ -6,6 +6,8 @@ SENT = "sent"
 RETRY_PENDING = "retry_pending"
 FAILED = "failed"
 
+CHANNEL_TYPES = frozenset({"email", "sms", "push"})
+
 
 class Notification:
     def __init__(self, nid, target_channels, message):
