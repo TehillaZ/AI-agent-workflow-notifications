@@ -199,8 +199,36 @@ Optional: virtual environment (`.venv` / `venv` — listed in `.gitignore`).
 
 ## Initial Findings / Risks
 
-1. No automated tests exist.
+1. Automated test suite scaffolded in Phase 0 (`tests/`, pytest).
 2. Provider responses are not reflected correctly in notification status.
 3. Multi-channel notifications only send through the first channel.
 4. Update endpoint allows arbitrary field mutation via setattr.
 5. Input validation is largely missing.
+
+---
+
+## Phase 0 Baseline (verified 2026-06-19)
+
+### Server
+
+- `py -m pip install -r requirements.txt` then `py src/main.py` — server listens on port 3000.
+- `GET /notifications` returns **5** seeded records with statuses: `sent`, `pending`, `failed`, `pending`, `retry_pending`.
+
+### pytest infrastructure
+
+- `pytest>=8.0` added to `requirements.txt`; `pytest.ini` sets `pythonpath = src`.
+- `tests/conftest.py` — `notification` and `processor` fixtures, `provider_response` helper.
+- `tests/test_infrastructure.py` — smoke tests for fixtures.
+- `tests/test_baseline_processor.py` — documents current bug: mocked `TemporaryFailure` and `PermanentFailure` both yield `status: "sent"` (confirms Phase 1 scope).
+- `py -m pytest` — 4 passed.
+
+### Manual endpoint checklist (baseline)
+
+| Endpoint | Baseline result |
+|----------|-----------------|
+| `GET /notifications` | 200, 5 records |
+| `GET /notifications/999` | 404 |
+| `POST /notifications` | 200, creates record (no validation) |
+| `PUT /notifications/<id>` | 200, unrestricted field updates |
+| `POST /notifications/<id>/send` | 200, always `sent` after provider call (ignores `Result`) |
+| `POST /notifications/send-bulk` | 200, only `pending` processed |
