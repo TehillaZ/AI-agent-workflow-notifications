@@ -19,6 +19,7 @@ def _classify_result(response):
 
 
 def _aggregate_results(outcomes):
+    """Option A: any temporary → retry_pending; else any failure → failed; all success → sent."""
     errors = []
     has_temporary = False
     has_failure = False
@@ -40,15 +41,16 @@ def _aggregate_results(outcomes):
 
 
 def _dispatch_channel(target, message):
-    channel_type = target["type"]
-    payload = {"recipient": target["value"], "message": message}
-    if channel_type == "email":
-        return send_email(payload)
-    if channel_type == "sms":
-        return send_sms(payload)
-    if channel_type == "push":
-        return send_push(payload)
-    return None
+    # Built per call so tests can patch processor.send_* functions.
+    senders = {
+        "email": send_email,
+        "sms": send_sms,
+        "push": send_push,
+    }
+    send_fn = senders.get(target["type"])
+    if send_fn is None:
+        return None
+    return send_fn({"recipient": target["value"], "message": message})
 
 
 class NotificationProcessor:
