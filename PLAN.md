@@ -1,6 +1,6 @@
 # Notifications API — Implementation Plan
 
-This document is the authoritative roadmap for improving **notifications-api-python**. It covers architecture analysis, gaps, phased work, risks, and open questions. **This is a planning document only — no application code changes are included here.**
+This document is the authoritative roadmap for improving **notifications-api-python**. It covers architecture analysis, gaps, phased work, risks, and resolved decisions. **This is a planning document only — no application code changes are included here.**
 
 ---
 
@@ -47,8 +47,8 @@ flowchart TB
 
 - **In-memory only** — module-level list in `src/storage.py`; restart resets to seed data.
 - **Synchronous delivery** — provider calls block inside the HTTP request; no queue or background workers.
-- **Single dependency** — Flask 3.x only (`requirements.txt`).
-- **No auth, persistence, or automated tests.**
+- **Dependencies** — Flask 3.x (`requirements.txt`); pytest added in Phase 0 (decided for this task).
+- **No auth or persistence** — automated tests added per Section 5.
 - **Providers are simulated vendor APIs** — probabilistic `Success` / `TemporaryFailure` / `PermanentFailure` / `InvalidRequest` responses; **must not be edited** per `SPEC.md` and project hooks.
 
 ### Status model (defined vs. used)
@@ -92,7 +92,7 @@ Seed data in `src/storage.py` demonstrates all five, but `src/processor.py` only
 ### Operational / quality debt
 
 - Flask debug mode enabled by default (`app.run(port=3000)` with no `debug=False`).
-- No automated test suite; verification is manual only (`AGENTS.md`).
+- No automated test suite yet; pytest suite planned in Phases 0–6 (see Section 5).
 - No CI configuration.
 - Import style assumes running `python src/main.py` from repo root (not package-relative).
 - Python version not pinned.
@@ -103,7 +103,7 @@ From `SPEC.md`, `AGENTS.md`, and `.cursor/hooks/`:
 
 - **Do not modify** anything under `src/providers/`.
 - **README narrative** (issues, approach, AI tool usage) must be **hand-written by the candidate** — AI may not draft that text.
-- **Ask before**: new dependencies, API response format changes, route renames, persistent storage, seed data changes affecting tests, git push/branches.
+- **Ask before**: API response format changes, route renames, persistent storage, seed data changes affecting tests, git push/branches. (pytest dependency is pre-approved — see Section 5 Decision #6.)
 
 ---
 
@@ -120,19 +120,23 @@ From `SPEC.md`, `AGENTS.md`, and `.cursor/hooks/`:
 
 | Risk | Mitigation |
 |------|------------|
-| Multi-channel semantics are unspecified | Decide and document strategy in Phase 3 before coding |
-| Fixing status mapping changes observable API behavior | Treat as bug fix; verify with manual curl; note in hand-written README |
+| Multi-channel semantics | Option A documented in Section 5 |
+| Fixing status mapping changes observable API behavior | Treat as bug fix; verify with manual curl and `pytest`; note in hand-written README |
 | Renaming `lastError` would break API contract | Keep field name; only change when it is populated (ask before adding new fields) |
-| Random provider outcomes make deterministic testing hard | Mock provider imports in tests, or run statistical manual checks |
-| Adding pytest requires dependency approval | Phase 6 is optional pending approval |
+| Random provider outcomes make deterministic testing hard | Mock `providers.*.send` in unit tests; use manual curl for integration smoke checks |
+| Test maintenance burden | Keep tests focused on processor, validation, segmenter; run `pytest` after each phase |
 
 ---
 
 ## 4. Implementation Phases
 
-### Phase 0 — Baseline and verification harness
+### Phase 0 — Baseline, pytest setup, and verification harness
 
-**Goal:** Establish a reproducible baseline before changing behavior.
+**Goal:** Establish a reproducible baseline before changing behavior; scaffold the test suite.
+
+**TDD setup (first step of this phase):**
+- Add `pytest` to `requirements.txt` (decided for this task — no further approval needed).
+- Create `tests/` with `conftest.py` (fixtures for `Notification`, mocked providers).
 
 **Required changes:**
 - Run app locally (`py -m pip install -r requirements.txt` → `py src/main.py`).
@@ -146,6 +150,7 @@ From `SPEC.md`, `AGENTS.md`, and `.cursor/hooks/`:
 **Acceptance criteria:**
 - Server starts on port 3000 with 5 seeded notifications.
 - Documented evidence that failed/temporary provider responses currently yield `status: "sent"` (confirms Phase 1 scope).
+- `tests/` directory exists; `pytest` runs (may have zero or placeholder tests).
 
 ---
 
@@ -153,9 +158,14 @@ From `SPEC.md`, `AGENTS.md`, and `.cursor/hooks/`:
 
 **Goal:** Make notification status reflect provider delivery outcomes.
 
+**TDD steps:**
+1. Write failing tests in `tests/test_processor_status_mapping.py` (mock providers; assert status transitions for Success / TemporaryFailure / PermanentFailure / InvalidRequest).
+2. Implement mapping in `src/processor.py`.
+3. Run `pytest` before Phase 2.
+
 **Required changes in `src/processor.py`:**
 - After provider call, branch on `response["Result"]`:
-  - `Success` → `SENT`; clear or set informational message appropriately
+  - `Success` → `SENT`; clear `lastError` (Section 5 Decision #4)
   - `TemporaryFailure` → `RETRY_PENDING`; store `Message` in `lastError`
   - `PermanentFailure` / `InvalidRequest` → `FAILED`; store `Message` in `lastError`
 - Import `RETRY_PENDING` from `models`.
@@ -164,11 +174,12 @@ From `SPEC.md`, `AGENTS.md`, and `.cursor/hooks/`:
 **Dependencies:** Phase 0 baseline.
 
 **Risks:**
-- Success messages in `lastError` today may be relied on informally; decide whether to clear `lastError` on success or keep last provider message (recommend: clear on success, set only on non-success — document in README).
+- Success messages in `lastError` today may be relied on informally; clearing on success is the decided policy (Section 5).
 
 **Acceptance criteria:**
+- `pytest` tests pass for all four provider `Result` types.
 - Manual sends eventually produce `sent`, `retry_pending`, and `failed` matching provider `Result`.
-- `attempts` and `lastAttemptAt` still increment/update on each send.
+- `attempts` and `lastAttemptAt` still increment/update on each send (including immediate failures such as empty `targetChannels` — keep current behavior).
 - `processing` is set at start of send (existing behavior preserved).
 - Single-channel email/sms/push paths unchanged except status mapping.
 
@@ -185,6 +196,11 @@ curl -X POST http://localhost:3000/notifications/3/send
 
 **Goal:** Align bulk delivery with the status lifecycle implied by seed data.
 
+**TDD steps:**
+1. Write failing tests in `tests/test_processor_bulk.py` (assert `send_all()` includes `retry_pending`).
+2. Update `send_all()` filter in `src/processor.py`.
+3. Run `pytest` before Phase 3.
+
 **Required changes in `src/processor.py`:**
 - Update `send_all()` filter to include notifications where `status in (PENDING, RETRY_PENDING)`.
 - Optionally exclude `PROCESSING` (should not occur in single-threaded sync flow, but safe guard).
@@ -194,6 +210,7 @@ curl -X POST http://localhost:3000/notifications/3/send
 **Risks:** Bulk may now re-process notifications that were manually set to `retry_pending` in seed (`n5`) — this is desired behavior.
 
 **Acceptance criteria:**
+- `pytest` bulk tests pass.
 - `POST /notifications/send-bulk` processes seed `n2` (pending), `n4` (pending), and `n5` (retry_pending).
 - Already `sent` / `failed` seed records are skipped.
 - Response returns full notification list with updated statuses.
@@ -204,36 +221,37 @@ curl -X POST http://localhost:3000/notifications/3/send
 
 **Goal:** Deliver to all configured channels, not only `targetChannels[0]`.
 
+**TDD steps:**
+1. Write failing tests in `tests/test_processor_multichannel.py` (Option A aggregation; `lastError` joining).
+2. Implement channel iteration and aggregation in `src/processor.py`.
+3. Run `pytest` before Phase 4.
+
 **Required changes in `src/processor.py`:**
 - Replace single-target logic with iteration over `n.targetChannels`.
 - Dispatch to correct provider per channel `type`.
 - Aggregate results into a final notification status.
 
-**Recommended strategy (pending confirmation — see Section 5):**
+**Strategy (resolved — Option A, see Section 5):**
+- SENT: all channels returned Success.
+- RETRY_PENDING: at least one channel returned TemporaryFailure.
+- FAILED: all remaining cases (PermanentFailure / InvalidRequest and no TemporaryFailure).
+- Options B/C (failover, per-channel tracking) rejected — see Section 5.
 
-*Option A — All channels must succeed:*
-- Final status `SENT` only if every channel returns `Success`.
-- Any `TemporaryFailure` → `RETRY_PENDING` (retry all on next send).
-- Any `PermanentFailure` / `InvalidRequest` → `FAILED`.
-
-*Option B — First success wins (failover):*
-- Try channels in order; stop on first `Success` → `SENT`.
-- All failures → `FAILED` or `RETRY_PENDING` if any temporary.
-
-*Option C — Independent per-channel (requires API shape change):*
-- Store per-channel results — **likely out of scope** without API format approval.
-
-**Default recommendation:** Option A — matches seed data where notifications list multiple channels as simultaneous targets.
+**`lastError` aggregation (Option A):**
+- On SENT: clear `lastError`.
+- On RETRY_PENDING or FAILED: join all non-success provider `Message` values with `"; "` in `targetChannels` order (preserve `[email]`, `[sms]`, `[push]` prefixes).
+- Example: SMS temporary + email permanent → `retry_pending`, `lastError` = `"[sms] temporary outage; [email] address rejected"`.
+- Unknown channel type: include `"Unknown channel: <type>"` in the joined string; treat as failure for aggregation.
 
 **Dependencies:** Phase 1.
 
 **Risks:**
 - Increases provider calls per send (3x for `n5`); acceptable for in-memory demo.
-- Partial failure aggregation rules must be documented.
 
 **Acceptance criteria:**
-- Sending `n4` or `n5` invokes multiple provider calls (observable via consistent multi-prefix messages in `lastError` or logs if added).
-- Final status follows chosen aggregation rules.
+- `pytest` multi-channel tests pass.
+- Sending `n4` or `n5` invokes multiple provider calls (observable via joined `lastError` messages).
+- Final status and `lastError` follow Option A rules.
 - Unknown channel type still fails the notification.
 
 ---
@@ -241,6 +259,11 @@ curl -X POST http://localhost:3000/notifications/3/send
 ### Phase 4 — Input validation and update safety
 
 **Goal:** Return predictable 400 errors and prevent unsafe field mutation.
+
+**TDD steps:**
+1. Write failing tests in `tests/test_validation.py` (missing fields, invalid channels, PUT allowlist).
+2. Implement validation in `src/main.py` (or `src/validation.py` if logic grows).
+3. Run `pytest` before Phase 5.
 
 **Required changes:**
 
@@ -255,12 +278,13 @@ Optional new module `src/validation.py` if logic grows; otherwise keep helpers i
 `src/storage.py`:
 - Recompute `smsSegments` when `message` or SMS channels change via PUT (currently only set on create).
 
-**Dependencies:** None strictly, but best after Phase 1–3 so send behavior is stable.
+**Dependencies:** Phase 3 (validation after delivery logic is stable).
 
 **Risks:**
 - Stricter validation may reject requests that previously "worked" with bad data (e.g. seed `n2` SMS number `"12345"` is invalid per provider — already fails at provider level).
 
 **Acceptance criteria:**
+- `pytest` validation tests pass.
 - `POST /notifications` with missing fields → 400 with `{ "error": "..." }`.
 - `PUT` cannot change `status` or `id`.
 - Invalid channel type on create → 400.
@@ -271,45 +295,59 @@ Optional new module `src/validation.py` if logic grows; otherwise keep helpers i
 
 **Goal:** Prevent nonsensical send operations and improve dev-server defaults.
 
+**TDD steps:**
+1. Write failing tests in `tests/test_send_guards.py` (409 for `sent` resend; 200 on delivery failure).
+2. Implement guards in `src/main.py` or `src/processor.py`.
+3. Run `pytest` before Phase 6.
+
 **Required changes:**
 
-`src/processor.py` or `src/main.py`:
-- Define policy for sending non-pending notifications:
-  - **Recommended:** Allow manual resend of `retry_pending` and `failed`; reject or no-op `sent` (return 409 or 400 with message — prefer 409 to signal conflict without changing response shape of success path).
-  - **Alternative:** Allow resend of anything except `processing`.
+`src/main.py` (or `src/processor.py`):
+- **Resend policy (decided):** Allow manual resend of `retry_pending` and `failed`; reject `sent` with **HTTP 409** and `{ "error": "notification already sent" }` (or similar).
+
+**HTTP semantics (see Section 5 Decisions #9–10):**
+
+| Endpoint / case | HTTP status | Response body |
+|-----------------|-------------|---------------|
+| `POST /notifications/<id>/send` — delivery ends `sent`, `retry_pending`, or `failed` | **200** | Updated notification object |
+| `POST /notifications/<id>/send` — notification already `sent` | **409** | `{ "error": "..." }` |
+| `POST /notifications/<id>/send` — not found | **404** | `{ "error": "not found" }` |
+| `POST /notifications` — valid create | **200** | New notification object |
+| `POST /notifications` — validation failure | **400** | `{ "error": "..." }` |
+| `PUT /notifications/<id>` — disallowed field | **400** | `{ "error": "..." }` |
 
 `src/main.py`:
 - Set `debug=False` in `app.run()` (or document why debug stays on).
 
-**Dependencies:** Phases 1–2.
+**Dependencies:** Phases 2 and 4.
 
 **Risks:** Rejecting resend of `sent` notifications changes behavior for clients that currently re-post send on id=1.
 
 **Acceptance criteria:**
-- Sending a `sent` notification returns appropriate error (if policy chosen).
-- Sending `retry_pending` succeeds and increments attempts.
+- `pytest` send-guard tests pass.
+- Sending a `sent` notification returns 409 with `{ "error": "..." }`.
+- Sending `retry_pending` or `failed` succeeds (200) and increments attempts.
+- Delivery ending in `failed` or `retry_pending` still returns 200 with updated notification body.
 - Server starts without Flask debug reloader unless explicitly enabled.
 
 ---
 
-### Phase 6 — Automated tests (optional, requires approval)
+### Phase 6 — Test suite completeness
 
-**Goal:** Lock in processor and validation behavior with deterministic tests.
+**Goal:** Close coverage gaps; ensure full suite passes before quality pass.
 
 **Required changes:**
-- Add `pytest` to `requirements.txt` — **ask first**.
-- Create `tests/` directory:
-  - `tests/test_processor.py` — mock `providers.*.send` to return fixed responses; assert status transitions.
-  - `tests/test_validation.py` — test allowlist and create validation (if extracted).
-  - `tests/test_segmenter.py` — unit tests for edge cases (empty message, long words, 160-char boundary).
+- Add `tests/test_segmenter.py` — edge cases (empty message, long words, 160-char boundary).
+- Run full `pytest` suite; fill any remaining gaps from Phases 1–5.
+- Confirm coverage of: success/temp/permanent/invalid mapping, bulk filter, multi-channel aggregation, validation, send guards.
 
-**Dependencies:** Phases 1–4.
+**Dependencies:** Phases 1–5.
 
-**Risks:** New dependency; test maintenance burden.
+**Risks:** None beyond routine test maintenance.
 
 **Acceptance criteria:**
 - `pytest` passes locally without hitting real random providers.
-- Coverage of: success/temp/permanent/invalid mapping, bulk filter, multi-channel aggregation.
+- Segmenter edge cases covered.
 
 ---
 
@@ -323,12 +361,13 @@ Optional new module `src/validation.py` if logic grows; otherwise keep helpers i
 - Run `/pr-review-toolkit` before push (`.cursor-plugin/`).
 - Remove any dead imports; ensure comments explain non-obvious aggregation rules only.
 
-**Dependencies:** Phases 1–5 complete.
+**Dependencies:** Phases 1–6 complete.
 
 **Risks:** Over-abstraction — keep map dict inline if <10 lines.
 
 **Acceptance criteria:**
 - No behavior change vs. Phase 5 verification checklist.
+- `pytest` still passes.
 - Review agents report no critical issues.
 
 ---
@@ -342,7 +381,7 @@ Optional new module `src/validation.py` if logic grows; otherwise keep helpers i
 - Push final code to private repository — **ask before push** per AGENTS.md.
 - Submit repository URL via assignment form.
 
-**Dependencies:** All coding phases complete and manually verified.
+**Dependencies:** All coding phases complete, `pytest` green, and manually verified.
 
 **Risks:** README must not be AI-generated (screening rule).
 
@@ -352,19 +391,29 @@ Optional new module `src/validation.py` if logic grows; otherwise keep helpers i
 
 ---
 
-## 5. Unclear Requirements — Clarify Before Coding
+## 5. Resolved Design Decisions
 
-These should be resolved with the assigner or team before Phases 3 and 5:
+All ambiguities below are resolved for this implementation. Reference this section from phases instead of re-opening questions.
 
-1. **Multi-channel send semantics** — Must all channels succeed (Option A), first success wins (Option B), or per-channel tracking (Option C)?
-2. **Resend policy** — Should `POST .../send` on an already-`sent` notification be allowed, rejected, or idempotent no-op?
-3. **Max retry attempts** — Should `retry_pending` eventually transition to `failed` after N attempts, or retry indefinitely on manual/bulk send?
-4. **`lastError` on success** — Clear the field, keep last message, or add a separate field (would need API approval)?
-5. **`smsSegments` purpose** — Display-only metadata, validation gate (reject over N segments), or billing integration?
-6. **Automated tests** — Expected for screening submission, or manual verification sufficient?
-7. **API error format** — Standardize all errors as `{ "error": "..." }` with 400/404/409, or minimal changes only?
+| # | Topic | Decision | Rationale |
+|---|-------|----------|-----------|
+| 1 | Multi-channel send | **Option A** — all channels must succeed for `sent`; any `TemporaryFailure` → `retry_pending`; else `failed` | Notification is one logical delivery across all configured channels |
+| 2 | Resend policy | Reject resend of `sent` with **HTTP 409**; allow resend of `retry_pending` and `failed` | Prevents duplicate external delivery |
+| 3 | Max retry attempts | No cap — `retry_pending` retried via manual send or bulk | Keeps in-memory implementation simple |
+| 4 | `lastError` on success | Clear on `sent`; set on `retry_pending` / `failed` only | Avoids misleading error state after success |
+| 5 | `smsSegments` | Display-only metadata; no validation gate | Informational; not billing enforcement |
+| 6 | Automated tests | **pytest required**; **TDD per phase** (failing test → implement → green); mock providers in unit tests | Deterministic coverage; `pytest` approved for this task |
+| 7 | API error format | `{ "error": "message" }` for 400, 404, 409 | Predictable client error handling |
+| 8 | Multi-channel `lastError` | Join non-success messages with `"; "` in channel order | Preserves all failure context |
+| 9 | Send HTTP on delivery failure | **200** with updated notification body (`failed` / `retry_pending` are valid send outcomes) | Success path response shape unchanged |
+| 10 | POST create status code | **200** (Flask default) | No API response format change without approval |
 
-**Recommended defaults if no answer:** Option A multi-channel, reject resend of `sent`, no max retry cap, clear `lastError` on success, keep `smsSegments` as metadata only, skip pytest unless approved, use `{ "error": "..." }` for new validation errors only.
+### TDD workflow (applies to Phases 1–5)
+
+1. Write failing pytest cases for the phase scope.
+2. Implement minimal code to pass.
+3. Run `pytest` before starting the next phase.
+4. Phase 6 adds segmenter tests and closes any coverage gaps.
 
 ---
 
@@ -372,20 +421,20 @@ These should be resolved with the assigner or team before Phases 3 and 5:
 
 ```mermaid
 flowchart LR
-    P0[Phase0_Baseline] --> P1[Phase1_StatusMapping]
-    P1 --> P2[Phase2_BulkRetry]
-    P1 --> P3[Phase3_MultiChannel]
-    P2 --> P5[Phase5_SendGuards]
-    P3 --> P5
-    P4[Phase4_Validation] --> P5
-    P5 --> P7[Phase7_Quality]
-    P6[Phase6_Tests_optional] --> P7
+    P0[Phase0_Baseline_plus_pytest_setup] --> P1[Phase1_StatusMapping_plus_tests]
+    P1 --> P2[Phase2_BulkRetry_plus_tests]
+    P1 --> P3[Phase3_MultiChannel_plus_tests]
+    P3 --> P4[Phase4_Validation_plus_tests]
+    P2 --> P5[Phase5_SendGuards_plus_tests]
+    P4 --> P5
+    P5 --> P6[Phase6_TestCompleteness]
+    P6 --> P7[Phase7_Quality]
     P7 --> P8[Phase8_Deliverables]
 ```
 
-**Minimum viable improvement (MVP):** Phases 0 → 1 → 2 → manual verification → Phase 8 README.
+**Minimum viable improvement (MVP):** Phases 0 → 1 → 2 (each with tests) → manual verification → Phase 8 README.
 
-**Recommended full scope:** Phases 0–5 + 7, with Phase 6 if pytest approved.
+**Recommended full scope:** Phases 0–7 (TDD integrated per phase), then Phase 8 deliverables.
 
 ---
 
@@ -395,12 +444,14 @@ flowchart LR
 |-------|----------|
 | `GET /notifications` | 5 seeded records, mixed statuses |
 | `GET /notifications/999` | 404 |
-| `POST /notifications` valid body | 201/200 with new id, `smsSegments` set when SMS present |
+| `POST /notifications` valid body | **200** with new id, `smsSegments` set when SMS present |
 | `POST /notifications` invalid body | 400 |
 | `PUT /notifications/1` `{ "status": "pending" }` | Ignored or 400 (after Phase 4) |
-| `POST /notifications/2/send` | Status reflects provider (not always `sent`) |
+| `POST /notifications/2/send` | Status reflects provider (not always `sent`); 200 with updated body |
+| `POST /notifications/1/send` (already `sent`) | 409 with `{ "error": "..." }` (after Phase 5) |
 | `POST /notifications/send-bulk` | Pending + retry_pending processed |
 | Multi-channel send (`n4`, `n5`) | All channels attempted (after Phase 3) |
+| `pytest` | Full suite passes |
 | Provider files | Unchanged git diff under `src/providers/` |
 
 ---
@@ -411,10 +462,10 @@ flowchart LR
 |------|--------|
 | `src/processor.py` | 1, 2, 3, 5, 7 |
 | `src/main.py` | 4, 5 |
-| `src/storage.py` | 4 (smsSegments on update) |
+| `src/storage.py` | 4 (`smsSegments` on update) |
 | `src/validation.py` | 4 (optional new file) |
-| `tests/*` | 6 (optional) |
-| `requirements.txt` | 6 (optional, with approval) |
+| `tests/*` | 0–6 (required) |
+| `requirements.txt` | 0 (`pytest`; decided) |
 | `README.md` | 8 (candidate hand-written) |
 | `PLAN.md` | This document |
 | **`src/providers/*`** | **Never** |
