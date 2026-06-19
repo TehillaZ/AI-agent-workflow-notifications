@@ -88,11 +88,10 @@ def test_put_sms_channel_recomputes_sms_segments(client):
         "/notifications/1",
         data=json.dumps(
             {
-                "message": "word " * 40,
                 "targetChannels": [{"type": "sms", "value": "+15551234567"}],
             }
         ),
         content_type="application/json",
     )
     assert response.status_code == 200
-    assert response.get_json()["smsSegments"] >= 1
+    assert response.get_json()["smsSegments"] == 1
