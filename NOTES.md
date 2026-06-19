@@ -196,3 +196,11 @@ Optional: virtual environment (`.venv` / `venv` — listed in `.gitignore`).
 | `models.py` | `Notification` class and status string constants |
 | `segmenter.py` | Word-aware minimum SMS segment calculator |
 | `providers/*.py` | Simulated third-party delivery with probabilistic outcomes |
+
+## Initial Findings / Risks
+
+1. No automated tests exist.
+2. Provider responses are not reflected correctly in notification status.
+3. Multi-channel notifications only send through the first channel.
+4. Update endpoint allows arbitrary field mutation via setattr.
+5. Input validation is largely missing.

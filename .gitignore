@@ -3,9 +3,6 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
-<<<<<<< HEAD
-=======
 
 # MCP memory store (local agent notes — do not commit)
 .cursor/memory.jsonl
->>>>>>> feat/agent-infrastructure

@@ -1,14 +1,5 @@
 # Screening Task — Specification
 
-## Setup
-
-1. Clone `notification-service-screening` (do **not** fork).
-2. Create a **private** GitHub repository, push the code, and invite **milaShurupova** and **holohup** as collaborators.
-3. Choose **one** language folder and work only in that folder:
-   - `notifications-api-typescript` — TypeScript / Node.js
-   - `notifications-api-dotnet` — C# / .NET
-   - `notifications-api-python` — Python
-
 ## Task
 
 1. Run the app locally and understand the current system.

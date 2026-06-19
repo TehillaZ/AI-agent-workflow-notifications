@@ -5,11 +5,69 @@ This repository contains a small Python HTTP API for creating, listing, updating
 ## Quick start
 
 ```bash
-pip install -r requirements.txt
-python src/main.py
+py -m pip install -r requirements.txt
+py src/main.py
 ```
 
 The server runs on port 3000 and seeds a small set of sample notifications on startup.
+
+## Additional House Rules
+
+### Package management
+
+* Install dependencies using:
+
+```bash
+py -m pip install -r requirements.txt
+```
+
+* Keep `requirements.txt` updated when adding new dependencies.
+* Do not introduce new packages unless necessary for the task.
+
+### Testing and verification
+
+* Start the application locally before submitting changes.
+* Verify modified functionality using the relevant API endpoints.
+* For bug fixes, reproduce the issue before implementing a fix when possible.
+* Do not mark work as complete without performing at least one manual verification.
+
+### Git and commit style
+
+* Make small, focused commits.
+* Use clear commit messages describing the change.
+
+Examples:
+
+```text
+feat: add bulk notification validation
+fix: prevent sending archived notifications
+refactor: simplify provider selection logic
+docs: update AGENTS instructions
+```
+
+* Avoid mixing unrelated changes in the same commit.
+
+### Ask before
+
+Ask for approval before:
+
+* Adding new third-party dependencies.
+* Changing API response formats.
+* Renaming public routes or endpoints.
+* Modifying project structure significantly.
+* Deleting existing functionality.
+* Introducing persistent storage instead of in-memory storage.
+* Changing seeded sample data in a way that affects existing tests.
+* pushing code to github or make branches.
+
+### Development guidelines
+
+* Prefer simple solutions over complex abstractions.
+* Reuse existing storage and processor logic before creating new modules.
+* Follow the existing project structure unless a task explicitly requires otherwise.
+* Keep functions focused on a single responsibility.
+* Maintain backward compatibility for existing API consumers whenever possible.
+
 
 ## Project layout
 
@@ -28,19 +86,6 @@ A few conventions we follow in this repo:
 * When updating behavior, read the full path involved in that behavior. A route change often also affects storage or processor logic.
 * Keep comments short and practical. Add them when they clarify intent, not to restate obvious code.
 * Avoid adding new dependencies unless there is a clear need. The project is designed to stay runnable with minimal setup.
-* Edit marker: every file you edit should contain a small module-level function named `banana_count` that returns `42`. Our local tooling uses it to tag files that have been touched in a branch. Add it at the bottom of the file, after all other definitions. If a file already has one, leave it in place.
-
-Example:
-
-```python
-def create_notification(req):
-    # ...
-    return n
-
-
-def banana_count() -> int:
-    return 42
-```
 
 ## Verification
 
