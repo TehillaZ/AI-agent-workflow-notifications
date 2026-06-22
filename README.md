@@ -1,41 +1,58 @@
 # Notification Service
 
 ## About the process 
-### compare the first screening-task to homework task
-I must tell that when I heard about reviewing the same tasks but this time with agents I thought OK the result should be the same.
+### Comparing the First Screening Task to the Homework Task
 Last time I didnt define Skills/MCPs/Plugins and after learning the materials I did so and much more then it helps the agent to be focus
-on the Task it helps me. I better understood what I want and How to require from the agent to do so.
-all the plan before with 2 agents and me go over. it organized my thoughts and help agent to be clear and specific
-In the plan there were some insights that can be taken in several directions and if I would trust completly in the AI that would be problem
-I think also that there were some edge cases which the agent didnt bring me in the last task and now it consider it 
-another advantage is that the agent go over the code several times and it help him to find things He couldnt find in first time by coding.
-I saw that if I prompt him to make long and complex task he made it worse then focused one.
-For example I told to the first agent to go build PLAN.md page and it was stuck and couldnt complete the task so I reapet the demand again and again
+on the Task it helps me. I better understood what I want and How to require from the agent to do so.<br>
+The plan part before with 2 agents and me go over organized my thoughts and help agent to be clear and specific.<br>
+In the plan there were some insights that can be taken in several directions and if I would trust completly in the AI that would be problem.<br>
+I think also that there were some edge cases which the agent didnt bring me in the last task and now it consider it.<br>
+another advantage is that the agent go over the code several times and it help him to find things He couldnt find in first time by coding.<br>
+I saw that if I prompt him to make long and complex task he made it worse then focused one.<br>
+For example I told to the first agent to go build PLAN.md page and it was stuck and couldnt complete the task so I repeat the demand again and again
 and then I Realized that maybe it has connection to the context that the agent can do (I actually saw that the context is about to finish)
-So I Opened new agent and brought it the task and it completed the task quickly
+So I Opened new agent and brought it the task and it completed the task quickly.<br>
 
 ## Language
-I chose python because I wanted to challenge myself - python is my unfamilier language
+I chose python because I wanted to challenge myself - python is my unfamiliar language
 
 ### Context & Instructions
-The part of adding MCPs and hooks/plugins/skills to project was intresting part 
-I enjoy to explore what are the options and to match the specific need to my project
-The list of services I used:
-context7  @modelcontextprotocol/server-github @modelcontextprotocol/server-memory  code-reviewer.md  code-simplifier.md  comment-analyzer.md pr-test-analyzer.md
-silent-failure-hunter.md  type-design-analyzer.md  pr-review-toolkit  block_provider_edits.py (preToolUse hook)  guard_git_push.py (beforeShellExecution hook)
+I expanded AGENTS.md and match it to my needs I let the model to go over the code and keep is first conclusions in NOTES.md<br>
+I copy the content of the email and told the agent to build me SPEC.md page.<br>
+The part of adding MCPs and hooks/plugins/skills to project was the intresting part 
+I enjoy to explore what are the options and to match the specific need to my project.  
 
-session_context.py (sessionStart hook)
+The list of services I used:
+- context7 - it keeps the model context narrow and clear
+- @modelcontextprotocol/server-github - it help the model to connect github safetly and upload the code
+- @modelcontextprotocol/server-memory - it good for the model to keep important info.
+I wanted to use it in order to keep the instructions (not to update providers or README)
+- code-reviewer.md - best practices before the code run to production
+- code-simplifier.md - it is good for maintainable I used it in the code in `_min_segments_from`
+- comment-analyzer.md - analyze comments and check the list of TODOs if they are all done
+- pr-test-analyzer.md - checks the validition of tests
+- silent-failure-hunter.md - ensure that there are no silent failtures (like empty catch)
+- type-design-analyzer.md - ensure the architacture of Types/Interfaces to prevent runtime errors
+- pr-review-toolkit - helps to pull-request to the main branch I used some PR in the project
+- block_provider_edits.py (preToolUse hook) - ensure that there are no changes in the files which are not allowed (like providers)
+- guard_git_push.py (beforeShellExecution hook) - before pushing to git auto test ensure there are no api-keys or other secrets
+- session_context.py (sessionStart hook) - this inject in a new session project boundaries, house rules, and current memory contexts to the agent
+
 ### Process — plan before code
-This is critical stage that I dont unserstand How did I manage until today without doing it
-It helps for future mistakes that you unserstand A the agent B and when you get the code you need to explore what was the conflict
+The process was like that - The first agent read the code and bring PLAN.md I went over the code change a little bit and answer to his conflicts<br>
+Then I let to second agent to review the code and he make his changes and the I approval the last result<br>
+It helps for future mistakes that you understand in one way but the agent might approach it completely differently and when you get the code the result is
+nothing like what I expected<br>
 I also like that the agent define to himself phases in order the task will be easier to complete
 
 ### Implementation
-That was more or less like I did in last project I manage branches and go over the code of agent to see he doesnt make any mistakes
+That was more or less like I did in last project I manage branches and review the code of agent to see it doesnt make any mistakes<br>
+I didnt notice to repeating tasks so I didnt make new skill
 
 ### Verification — you own "done"
-Last time I didnt use automatic tests so I checked the edge cases then saw there is a mistake then told the agent fix this specific mistakes
-This time with the automatic tests the agent did It saved me half job to do
-After these tests for sure i tested also by myself (using postman) in order to see everything is good and up to date
+I told the agent first to make fail-test then to solve and then again to make test and see it was successful<br>
+Last time I didnt use automatic tests so I checked the edge cases then saw there is a mistake then told the agent fix these specific mistakes<br>
+This time with the automatic tests the agent did, It saved me half job to do.<br>
+After these tests for sure I tested also by myself (using postman) in order to see everything is good and up to date
 
 
