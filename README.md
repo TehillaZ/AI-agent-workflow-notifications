@@ -1,5 +1,8 @@
 # AI-First Engineering Workflow: Notifications API
 <img width="2560" height="840" alt="banner" src="https://github.com/user-attachments/assets/dcd85ec2-80ac-440f-afdc-b179e67f1259" />
+
+
+<br>
 ## Background
 
 This project was part of the **AI Engineering track at ZioNet**. The exercise was built like a real
